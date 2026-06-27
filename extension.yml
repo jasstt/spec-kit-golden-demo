@@ -5,15 +5,12 @@ extension:
   name: "Golden Demo"
   version: "0.1.0"
   description: "Extracts acceptance criteria from specs, builds test vectors, and produces a behavioral drift report — complementary to Architecture Guard and CDD."
-  author: "hamzamete"
-  repository: "https://github.com/hamzamete/spec-kit-golden-demo"
+  author: "jasstt"
+  repository: "https://github.com/jasstt/spec-kit-golden-demo"
   license: "MIT"
 
 requires:
   speckit_version: ">=0.1.0"
-  commands:
-    - "speckit.plan"
-    - "speckit.implement"
 
 provides:
   commands:

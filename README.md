@@ -21,6 +21,8 @@ Both hooks are **opt-in** (`optional: true`) — Spec Kit will prompt before run
 
 ```bash
 specify extension add --dev /path/to/golden-demo
+# veya doğrudan repodan:
+specify extension add --from https://github.com/jasstt/spec-kit-golden-demo/archive/refs/heads/main.zip
 ```
 
 ## Verify
