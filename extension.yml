@@ -16,7 +16,7 @@ provides:
   commands:
     - name: "speckit.golden-demo.extract-vectors"
       file: "commands/extract-vectors.md"
-      description: "Reads spec.md and plan.md, identifies acceptance criteria, writes .spec-kit/golden/test-vectors.md"
+      description: "Reads spec.md and plan.md, identifies acceptance criteria, writes .specify/golden-demo/test-vectors.md"
 
     - name: "speckit.golden-demo.check-drift"
       file: "commands/check-drift.md"
@@ -27,7 +27,7 @@ hooks:
     command: "speckit.golden-demo.extract-vectors"
     optional: true
     prompt: "Golden Demo: extract test vectors from spec and plan?"
-    description: "Pulls acceptance-criteria items into .spec-kit/golden/test-vectors.md after planning"
+    description: "Pulls acceptance-criteria items into .specify/golden-demo/test-vectors.md after planning"
 
   after_implement:
     command: "speckit.golden-demo.check-drift"

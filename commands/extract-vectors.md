@@ -1,5 +1,5 @@
 ---
-description: "Reads spec.md and plan.md for the current feature, identifies lines that contain acceptance criteria, and writes them to .spec-kit/golden/test-vectors.md. No code is generated at this stage — vectors are listed as plain text for human review."
+description: "Reads spec.md and plan.md for the current feature, identifies lines that contain acceptance criteria, and writes them to .specify/golden-demo/test-vectors.md. No code is generated at this stage — vectors are listed as plain text for human review."
 ---
 
 # Golden Demo — Extract Test Vectors
@@ -20,9 +20,9 @@ test vectors for later use by the drift-check step.
      "acceptance criteria", "AC:", "✓", "- [ ]"
    - Any explicit input/output examples (e.g. `input: X → output: Y`)
 
-4. Create the directory `.spec-kit/golden/` if it does not already exist.
+4. Create the directory `.specify/golden-demo/` if it does not already exist.
 
-5. Write the discovered items to `.spec-kit/golden/test-vectors.md` using
+5. Write the discovered items to `.specify/golden-demo/test-vectors.md` using
    this exact format:
 
 ```markdown

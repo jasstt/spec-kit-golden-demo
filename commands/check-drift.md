@@ -1,5 +1,5 @@
 ---
-description: "Reads .spec-kit/golden/test-vectors.md and prints a dry-run drift report — one line per vector, prefixed with 'would run:'. No code is executed at this stage."
+description: "Reads .specify/golden-demo/test-vectors.md and prints a dry-run drift report — one line per vector, prefixed with 'would run:'. No code is executed at this stage."
 ---
 
 # Golden Demo — Behavioral Drift Check (Dry-Run)
@@ -11,7 +11,7 @@ that the hook fires correctly and that the vector file is reachable.
 
 ## Steps
 
-1. Check whether `.spec-kit/golden/test-vectors.md` exists.
+1. Check whether `.specify/golden-demo/test-vectors.md` exists.
 
    - If the file does not exist, stop and report:
      > "Golden Demo: no test-vectors.md found. Run /speckit.plan first, or

@@ -12,7 +12,7 @@
 
 | Hook | Triggers after | Action |
 |---|---|---|
-| `after_plan` | `/speckit.plan` | Scans `spec.md` + `plan.md` for acceptance criteria → writes `.spec-kit/golden/test-vectors.md` |
+| `after_plan` | `/speckit.plan` | Scans `spec.md` + `plan.md` for acceptance criteria → writes `.specify/golden-demo/test-vectors.md` |
 | `after_implement` | `/speckit.implement` | Reads `test-vectors.md` → prints `would run: {vector}` for each entry (dry-run) |
 
 Both hooks are **opt-in** (`optional: true`) — Spec Kit will prompt before running either one.
