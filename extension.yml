@@ -1,0 +1,46 @@
+schema_version: "1.0"
+
+extension:
+  id: "golden-demo"
+  name: "Golden Demo"
+  version: "0.1.0"
+  description: "Extracts acceptance criteria from specs, builds test vectors, and produces a behavioral drift report — complementary to Architecture Guard and CDD."
+  author: "hamzamete"
+  repository: "https://github.com/hamzamete/spec-kit-golden-demo"
+  license: "MIT"
+
+requires:
+  speckit_version: ">=0.1.0"
+  commands:
+    - "speckit.plan"
+    - "speckit.implement"
+
+provides:
+  commands:
+    - name: "speckit.golden-demo.extract-vectors"
+      file: "commands/extract-vectors.md"
+      description: "Reads spec.md and plan.md, identifies acceptance criteria, writes .spec-kit/golden/test-vectors.md"
+
+    - name: "speckit.golden-demo.check-drift"
+      file: "commands/check-drift.md"
+      description: "Reads test-vectors.md and reports which vectors would be executed (dry-run stub)"
+
+hooks:
+  after_plan:
+    command: "speckit.golden-demo.extract-vectors"
+    optional: true
+    prompt: "Golden Demo: extract test vectors from spec and plan?"
+    description: "Pulls acceptance-criteria items into .spec-kit/golden/test-vectors.md after planning"
+
+  after_implement:
+    command: "speckit.golden-demo.check-drift"
+    optional: true
+    prompt: "Golden Demo: run behavioral drift check?"
+    description: "Dry-run drift report against the captured test vectors after implementation"
+
+tags:
+  - "testing"
+  - "drift-detection"
+  - "behavioral-oracle"
+  - "tdd"
+  - "quality"
