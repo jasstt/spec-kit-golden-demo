@@ -4,18 +4,28 @@
 > captures acceptance criteria from your spec as test vectors and produces a
 > behavioral drift report after implementation.
 
-**Status: draft / hook-interface validation** — production execution logic is not yet implemented.
+**Status: beta** — fully functional deterministic behavioral execution.
 
 ---
 
-## What it does
+## How it works
 
-| Hook | Triggers after | Action |
-|---|---|---|
-| `after_plan` | `/speckit.plan` | Scans `spec.md` + `plan.md` for acceptance criteria → writes `.specify/golden-demo/test-vectors.md` |
-| `after_implement` | `/speckit.implement` | Reads `test-vectors.md` → prints `would run: {vector}` for each entry (dry-run) |
+**v0.1.x (dry-run):**
+- `after_plan` → extract vectors → list criteria
+- `after_implement` → "would run" dry-run report
+
+**v0.2.0 (behavioral execution):**
+- `after_plan` → extract vectors + input/output pairs + empty golden templates
+- `after_implement` → read manually implemented golden files → execute both golden and real implementations → compare outputs → deterministic drift score + report
 
 Both hooks are **opt-in** (`optional: true`) — Spec Kit will prompt before running either one.
+
+## What it does NOT do
+To avoid false positives and maintain a deterministic oracle, Golden Demo intentionally omits:
+- LLM-as-judge semantic comparison (non-deterministic)
+- Side-effecting code execution (DB, network, filesystem)
+- External dependency resolution
+- Complex multi-step workflows
 
 ## Installation
 
@@ -29,7 +39,7 @@ specify extension add --from https://github.com/jasstt/spec-kit-golden-demo/arch
 
 ```bash
 specify extension list
-# ✓ Golden Demo (v0.1.1)
+# ✓ Golden Demo (v0.2.0)
 ```
 
 Then run your normal SDD workflow:
