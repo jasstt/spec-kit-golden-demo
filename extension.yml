@@ -3,7 +3,7 @@ schema_version: "1.0"
 extension:
   id: "golden-demo"
   name: "Golden Demo"
-  version: "0.1.0"
+  version: "0.1.1"
   description: "Extracts acceptance criteria from specs, builds test vectors, and produces a behavioral drift report — complementary to Architecture Guard and CDD."
   author: "jasstt"
   repository: "https://github.com/jasstt/spec-kit-golden-demo"
