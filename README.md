@@ -29,7 +29,7 @@ specify extension add --from https://github.com/jasstt/spec-kit-golden-demo/arch
 
 ```bash
 specify extension list
-# ✓ Golden Demo (v0.1.0)
+# ✓ Golden Demo (v0.1.1)
 ```
 
 Then run your normal SDD workflow:
