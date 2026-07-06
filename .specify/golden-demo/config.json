@@ -1,0 +1,5 @@
+{
+  "real_cmd": "node sum_list.js",
+  "input_method": "stdin",
+  "input_size_threshold_bytes": 4096
+}

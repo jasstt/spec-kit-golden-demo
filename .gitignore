@@ -1,0 +1,27 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Development / test scripts (not part of the extension)
+simulate_extract.py
+simulate_drift.py
+extract_helper.py
+test_fuzz_determinism.py
+test_non_interactive_safety.py
+test_vector16_deep.py
+
+# Runtime artifacts (generated per project, not tracked in the extension repo)
+.specify/golden-demo/drift-report.md
+.specify/golden-demo/test-vectors.md
+.specify/golden-demo/suggestions.md
+.specify/golden-demo/golden/
+
+# QA reports (local only)
+fuzz_determinism_proof.md
+non_interactive_safety_test.md
+v030_e2e_test_report.md
+three_missing_validations_report.md
+
+# Test spec
+spec.md

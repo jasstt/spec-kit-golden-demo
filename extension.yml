@@ -3,8 +3,8 @@ schema_version: "1.0"
 extension:
   id: "golden-demo"
   name: "Golden Demo"
-  version: "0.2.0"
-  description: "Extracts acceptance criteria from specs, builds test vectors, and produces a behavioral drift report — complementary to Architecture Guard and CDD."
+  version: "0.3.0"
+  description: "Golden Demo — Deterministic Behavioral Drift Oracle. v0.3.0 adds Cross-language execution, Fuzzing, Auto-Golden LLM generation, and CI/CD strict gatekeeping. — complementary to Architecture Guard and CDD."
   author: "jasstt"
   repository: "https://github.com/jasstt/spec-kit-golden-demo"
   license: "MIT"
@@ -15,6 +15,11 @@ extension:
       - Deterministic drift score (output equality)
       - Drift report in .specify/golden-demo/
       - Skips side-effecting and ambiguous specs
+    v0.3.0:
+      - Cross-language execution support
+      - Fuzzing integration
+      - Auto-Golden LLM generation
+      - CI/CD strict gatekeeping
 
 requires:
   speckit_version: ">=0.1.0"
@@ -27,7 +32,11 @@ provides:
 
     - name: "speckit.golden-demo.check-drift"
       file: "commands/check-drift.md"
-      description: "Reads test-vectors.md and reports which vectors would be executed (dry-run stub)"
+      description: "Runs real code against golden examples to detect behavioral drift. Exits 1 if drift detected in strict mode."
+
+    - name: "speckit.golden-demo.auto-golden"
+      file: "commands/auto-golden.md"
+      description: "Automatically writes pure function golden templates using LLM. Requires human approval."
 
 hooks:
   after_plan:
