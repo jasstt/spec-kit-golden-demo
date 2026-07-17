@@ -144,19 +144,100 @@ def generate_fuzz_inputs(type_hint):
 
 # ─── TEMPLATE WRITERS ─────────────────────────────────────────────────────────
 
-def write_golden_template(vec_id, criteria, expected_val, has_side_effects):
+def write_golden_template(vec_id, criteria, expected_val):
     template_path = os.path.join(golden_dir, f"vector_{vec_id}_golden.py")
     if not os.path.exists(template_path):
-        ctx_param = ", context=None" if has_side_effects else ""
         with open(template_path, "w", encoding="utf-8") as f:
             f.write(f"# Golden Example for Vector {vec_id}\n")
             f.write(f"# Criteria: {criteria}\n\n")
-            f.write(f"def execute(input_data{ctx_param}):\n")
+            f.write(f"def execute(input_data):\n")
             f.write(f'    """\n')
             f.write(f"    Expected Output: {expected_val or 'not specified'}\n")
             f.write(f'    """\n')
             f.write(f"    # TODO: Implement this pure function\n")
             f.write(f"    pass\n")
+
+def write_fixture_scaffold(vec_id, criteria, side_effects):
+    """Create fixture directory with appropriate template files for the sandbox type."""
+    fixture_dir = os.path.join(fixtures_dir, f"vector_{vec_id}")
+    os.makedirs(fixture_dir, exist_ok=True)
+    readme_path = os.path.join(fixture_dir, "README.md")
+
+    effect = side_effects[0] if side_effects else None
+
+    if effect == "filesystem":
+        os.makedirs(os.path.join(fixture_dir, "fs"), exist_ok=True)
+        os.makedirs(os.path.join(fixture_dir, "fs_expected"), exist_ok=True)
+        if not os.path.exists(readme_path):
+            with open(readme_path, "w") as f:
+                f.write(f"# Fixture: Vector {vec_id} (filesystem)\n\n")
+                f.write(f"Criteria: {criteria}\n\n")
+                f.write("## Setup\n")
+                f.write("Place seed files in `fs/`. These will be copied into a tempdir before the real command runs.\n\n")
+                f.write("## Expected State\n")
+                f.write("Place expected output files in `fs_expected/`. Golden Demo will compare the tempdir contents after execution.\n\n")
+                f.write("## Real Command\n")
+                f.write("Your `real_cmd` in config.json will run with `cwd` set to the tempdir.\n")
+
+    elif effect == "http":
+        if not os.path.exists(os.path.join(fixture_dir, "http_routes.json")):
+            with open(os.path.join(fixture_dir, "http_routes.json"), "w") as f:
+                json.dump([
+                    {"method": "GET", "path": "/example", "status": 200, "response": {"ok": True}},
+                    {"method": "POST", "path": "/example", "status": 201, "response": {"created": True}}
+                ], f, indent=2)
+        if not os.path.exists(os.path.join(fixture_dir, "http_expected_calls.json")):
+            with open(os.path.join(fixture_dir, "http_expected_calls.json"), "w") as f:
+                json.dump([{"method": "GET", "path": "/example", "body": ""}], f, indent=2)
+        if not os.path.exists(readme_path):
+            with open(readme_path, "w") as f:
+                f.write(f"# Fixture: Vector {vec_id} (http)\n\n")
+                f.write(f"Criteria: {criteria}\n\n")
+                f.write("## Routes\n")
+                f.write("Edit `http_routes.json` to define what the fake server returns.\n\n")
+                f.write("## Expected Calls\n")
+                f.write("Edit `http_expected_calls.json` to define which HTTP calls your real code should make.\n\n")
+                f.write("## Real Command\n")
+                f.write("Your `real_cmd` will receive `BASE_URL=http://127.0.0.1:<port>` as an environment variable.\n")
+                f.write("Your code must use `BASE_URL` instead of a hardcoded URL.\n")
+
+    elif effect == "db":
+        if not os.path.exists(os.path.join(fixture_dir, "schema.sql")):
+            with open(os.path.join(fixture_dir, "schema.sql"), "w") as f:
+                f.write("-- Schema for test database\n")
+                f.write("-- Example:\n")
+                f.write("CREATE TABLE IF NOT EXISTS example (\n")
+                f.write("    id INTEGER PRIMARY KEY,\n")
+                f.write("    value TEXT NOT NULL\n")
+                f.write(");\n")
+        if not os.path.exists(os.path.join(fixture_dir, "seed.sql")):
+            with open(os.path.join(fixture_dir, "seed.sql"), "w") as f:
+                f.write("-- Seed data for test database\n")
+                f.write("-- Example:\n")
+                f.write("-- INSERT INTO example (id, value) VALUES (1, 'test');\n")
+        if not os.path.exists(os.path.join(fixture_dir, "db_expected.json")):
+            with open(os.path.join(fixture_dir, "db_expected.json"), "w") as f:
+                json.dump({"example": [{"id": 1, "value": "expected_value"}]}, f, indent=2)
+        if not os.path.exists(readme_path):
+            with open(readme_path, "w") as f:
+                f.write(f"# Fixture: Vector {vec_id} (db)\n\n")
+                f.write(f"Criteria: {criteria}\n\n")
+                f.write("## Schema\n")
+                f.write("Edit `schema.sql` to define tables. A fresh SQLite DB will be created per test run.\n\n")
+                f.write("## Seed Data\n")
+                f.write("Edit `seed.sql` to insert initial rows before the real command runs.\n\n")
+                f.write("## Expected State\n")
+                f.write("Edit `db_expected.json` to define the expected DB state after execution.\n\n")
+                f.write("## Real Command\n")
+                f.write("Your `real_cmd` will receive `DATABASE_URL=sqlite:///path/to/test.db` as env var.\n")
+                f.write("Your code must use `DATABASE_URL` instead of a hardcoded connection string.\n")
+    else:
+        if not os.path.exists(readme_path):
+            with open(readme_path, "w") as f:
+                f.write(f"# Fixture: Vector {vec_id} (UNSUPPORTED)\n\n")
+                f.write(f"Side effect type '{effect}' is not supported by Golden Demo.\n")
+                f.write("Supported types: filesystem, http, db\n")
+                f.write("This vector will be reported as [UNSUPPORTED] in drift reports.\n")
 
 def write_mock_template(vec_id, criteria, side_effects):
     mock_path = os.path.join(mocks_dir, f"vector_{vec_id}_mock.py")
