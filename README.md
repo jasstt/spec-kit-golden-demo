@@ -22,7 +22,7 @@
 
 **v0.4.0 (Applicability improvements):**
 - **Hybrid Spec Parsing**: Uses LLM (Gemini-first, then OpenAI) to extract acceptance criteria from natural language. Falls back to regex silently if no API key is set.
-- **Mock System**: Side-effecting vectors (DB, HTTP, filesystem) get a `mocks/` template with `setup()` / `teardown()`. Golden examples receive a `context` dict.
+- **Fixture Sandbox**: Side-effecting vectors get a disposable sandbox — filesystem (tempdir + seed), HTTP (local server + route fixtures), DB (SQLite + schema/seed). Real subprocess runs against these, not production resources.
 - **Semantic Comparison**: Drift is no longer binary. `6 vs 6.0` = 0.0 (numeric_tolerance). `[1,2,4] vs [1,2,3]` = 0.33 (partial_list). Match type is shown in the drift report.
 
 ## Warn vs. Strict Mode
@@ -69,7 +69,7 @@ specify extension add --from https://github.com/jasstt/spec-kit-golden-demo/arch
 
 ```bash
 specify extension list
-# ✓ Golden Demo (v0.3.0)
+# ✓ Golden Demo (v0.4.1)
 ```
 
 ## File layout

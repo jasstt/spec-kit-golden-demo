@@ -1,5 +1,5 @@
 ---
-description: "Reads spec.md and plan.md, extracts acceptance criteria via LLM (Gemini/OpenAI) with regex fallback, writes test-vectors.md, and creates empty golden + mock templates."
+description: "Reads spec.md and plan.md, extracts acceptance criteria via LLM (Gemini/OpenAI) with regex fallback, writes test-vectors.md, and creates golden + fixture scaffold templates for sandboxed side-effect testing."
 ---
 
 # Golden Demo — Extract Test Vectors
@@ -23,11 +23,11 @@ import random
 import urllib.request
 from datetime import datetime
 
-spec_dir = ".specify/golden-demo"
-golden_dir = os.path.join(spec_dir, "golden")
-mocks_dir = os.path.join(spec_dir, "mocks")
+spec_dir     = ".specify/golden-demo"
+golden_dir   = os.path.join(spec_dir, "golden")
+fixtures_dir = os.path.join(spec_dir, "fixtures")
 os.makedirs(golden_dir, exist_ok=True)
-os.makedirs(mocks_dir, exist_ok=True)
+os.makedirs(fixtures_dir, exist_ok=True)
 test_vectors_path = os.path.join(spec_dir, "test-vectors.md")
 
 content = ""
@@ -239,26 +239,6 @@ def write_fixture_scaffold(vec_id, criteria, side_effects):
                 f.write("Supported types: filesystem, http, db\n")
                 f.write("This vector will be reported as [UNSUPPORTED] in drift reports.\n")
 
-def write_mock_template(vec_id, criteria, side_effects):
-    mock_path = os.path.join(mocks_dir, f"vector_{vec_id}_mock.py")
-    if not os.path.exists(mock_path):
-        with open(mock_path, "w", encoding="utf-8") as f:
-            f.write(f"# Mock for Vector {vec_id}\n")
-            f.write(f"# Criteria: {criteria}\n")
-            f.write(f"# Side effects: {', '.join(side_effects) or 'none'}\n\n")
-            f.write("def setup():\n")
-            f.write('    """\n')
-            f.write("    Run before the test. Return a context dict.\n")
-            f.write("    Example: return {'db': {}, 'http_responses': {}}\n")
-            f.write('    """\n')
-            f.write("    # TODO: Set up your test context\n")
-            f.write("    return {}\n\n")
-            f.write("def teardown(context):\n")
-            f.write('    """\n')
-            f.write("    Run after the test. Clean up resources.\n")
-            f.write('    """\n')
-            f.write("    pass\n")
-
 # ─── MAIN ─────────────────────────────────────────────────────────────────────
 
 parse_method = "regex"
@@ -278,9 +258,9 @@ if not vectors_raw:
 vectors_md = f"# Test Vectors — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
 vectors_md += f"<!-- parse_method: {parse_method} -->\n\n"
 
-pending_count = 0
-mock_count = 0
-vector_count = 0
+pending_count   = 0
+fixture_count   = 0
+vector_count    = 0
 
 for i, vec in enumerate(vectors_raw):
     vec_id = str(i + 1)
@@ -308,10 +288,10 @@ for i, vec in enumerate(vectors_raw):
     vectors_md += f"- Status: {status}\n\n"
 
     if status == "pending-execution":
-        write_golden_template(vec_id, criteria, expected_val, has_side_effects)
+        write_golden_template(vec_id, criteria, expected_val)
         if has_side_effects:
-            write_mock_template(vec_id, criteria, side_effects)
-            mock_count += 1
+            write_fixture_scaffold(vec_id, criteria, side_effects)
+            fixture_count += 1
 
         # Fuzz only pure typed inputs
         if is_pure and "type:" in str(input_val).lower():
@@ -333,8 +313,8 @@ with open(test_vectors_path, "w", encoding="utf-8") as f:
 print(f"Golden Demo: {vector_count} vector(s) extracted [{parse_method} parse] -> {test_vectors_path}")
 if pending_count > 0:
     print(f"Golden Demo: {pending_count} golden template(s) created in {golden_dir}")
-if mock_count > 0:
-    print(f"Golden Demo: {mock_count} mock template(s) created in {mocks_dir}")
-    print("Note: Implement mock setup/teardown before running check-drift on side-effecting vectors.")
+if fixture_count > 0:
+    print(f"Golden Demo: {fixture_count} fixture scaffold(s) created in {fixtures_dir}")
+    print("Note: Fill in fixture files before running check-drift on side-effecting vectors.")
 EOF
 ```

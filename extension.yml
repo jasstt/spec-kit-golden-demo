@@ -3,8 +3,8 @@ schema_version: "1.0"
 extension:
   id: "golden-demo"
   name: "Golden Demo"
-  version: "0.4.0"
-  description: "Golden Demo — Deterministic Behavioral Drift Oracle. v0.4.0 adds hybrid LLM+regex spec parsing, mock-based side-effect isolation, and semantic comparison (numeric tolerance, type coercion, partial list scoring)."
+  version: "0.4.1"
+  description: "Golden Demo — Deterministic Behavioral Drift Oracle. v0.4.1 adds hybrid LLM+regex spec parsing, fixture/resource sandbox for side-effect isolation (filesystem/HTTP/DB), and semantic comparison (numeric tolerance, type coercion, partial list scoring)."
   author: "jasstt"
   repository: "https://github.com/jasstt/spec-kit-golden-demo"
   license: "MIT"
@@ -22,10 +22,17 @@ extension:
       - CI/CD strict gatekeeping
     v0.4.0:
       - Hybrid LLM+regex spec parsing (natural language support, regex fallback)
-      - Mock system for side-effecting code (setup/teardown context)
+      - Fixture/resource sandbox for side-effecting vectors:
+          filesystem: tempdir seeded from fixtures/vector_N/fs/
+          http: local HTTPServer with route fixtures, BASE_URL injected
+          db: disposable SQLite with schema/seed, DATABASE_URL injected
       - Semantic comparison: numeric tolerance, type coercion, partial list scoring
       - is_pure tracking per vector
-      - Mock templates auto-generated in .specify/golden-demo/mocks/
+      - Unsupported side-effect types reported as [UNSUPPORTED], not silently skipped
+    v0.4.1:
+      - compare_files: checks only expected files, ignores extra files in actual dir
+      - extract-vectors: removed mock references, replaced with fixture scaffold generation
+      - README and extension.yml: corrected mock claims to fixture sandbox description
 
 requires:
   speckit_version: ">=0.1.0"
