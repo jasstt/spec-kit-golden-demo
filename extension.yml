@@ -3,8 +3,8 @@ schema_version: "1.0"
 extension:
   id: "golden-demo"
   name: "Golden Demo"
-  version: "0.3.0"
-  description: "Golden Demo — Deterministic Behavioral Drift Oracle. v0.3.0 adds Cross-language execution, Fuzzing, Auto-Golden LLM generation, and CI/CD strict gatekeeping. — complementary to Architecture Guard and CDD."
+  version: "0.4.0"
+  description: "Golden Demo — Deterministic Behavioral Drift Oracle. v0.4.0 adds hybrid LLM+regex spec parsing, mock-based side-effect isolation, and semantic comparison (numeric tolerance, type coercion, partial list scoring)."
   author: "jasstt"
   repository: "https://github.com/jasstt/spec-kit-golden-demo"
   license: "MIT"
@@ -20,6 +20,12 @@ extension:
       - Fuzzing integration
       - Auto-Golden LLM generation
       - CI/CD strict gatekeeping
+    v0.4.0:
+      - Hybrid LLM+regex spec parsing (natural language support, regex fallback)
+      - Mock system for side-effecting code (setup/teardown context)
+      - Semantic comparison: numeric tolerance, type coercion, partial list scoring
+      - is_pure tracking per vector
+      - Mock templates auto-generated in .specify/golden-demo/mocks/
 
 requires:
   speckit_version: ">=0.1.0"
