@@ -125,7 +125,11 @@ def compare_files(actual_dir, expected_dir):
 # ─── SANDBOX CLASSES ──────────────────────────────────────────────────────────
 
 class FilesystemSandbox:
-    """Seed a tempdir, run real code there, compare file state after."""
+    """Seed a tempdir, inject GOLDEN_DEMO_FS_ROOT env var so real code can find it.
+    The real subprocess keeps the project cwd — it must read GOLDEN_DEMO_FS_ROOT
+    to locate its working directory. This avoids the problem of relative commands
+    (e.g. 'node sum_list.js') failing because the script doesn't exist in tempdir.
+    """
     def __init__(self, fixture_dir):
         self.fixture_dir = fixture_dir
         self.tempdir = None
@@ -138,7 +142,8 @@ class FilesystemSandbox:
                 src = os.path.join(seed_dir, fname)
                 if os.path.isfile(src):
                     shutil.copy(src, self.tempdir)
-        return {"cwd": self.tempdir, "env": {}, "input_override": None}
+        # cwd stays as project root; real code receives GOLDEN_DEMO_FS_ROOT
+        return {"cwd": None, "env": {"GOLDEN_DEMO_FS_ROOT": self.tempdir}, "input_override": None}
 
     def compare_state(self):
         expected_dir = os.path.join(self.fixture_dir, "fs_expected")
@@ -446,7 +451,7 @@ for s in skipped: report += f"- Vector {s['id']}: {s['reason']}\n"
 with open(report_path, "w", encoding="utf-8") as f:
     f.write(report)
 
-print(f"\nGolden Demo v0.4.0")
+print(f"\nGolden Demo v0.4.1")
 print("-" * 40)
 print(f"PASS: {pass_count}  FAIL: {fail_count}  ERROR: {error_count}  UNSUPPORTED: {unsupported_count}")
 print(f"Drift Score: {drift_score:.2f}  |  Report: {report_path}")

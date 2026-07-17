@@ -175,9 +175,21 @@ def write_fixture_scaffold(vec_id, criteria, side_effects):
                 f.write("## Setup\n")
                 f.write("Place seed files in `fs/`. These will be copied into a tempdir before the real command runs.\n\n")
                 f.write("## Expected State\n")
-                f.write("Place expected output files in `fs_expected/`. Golden Demo will compare the tempdir contents after execution.\n\n")
+                f.write("Place expected output files in `fs_expected/`. Golden Demo compares these against the tempdir after execution.\n\n")
                 f.write("## Real Command\n")
-                f.write("Your `real_cmd` in config.json will run with `cwd` set to the tempdir.\n")
+                f.write("Your `real_cmd` runs with the **project cwd unchanged**.\n")
+                f.write("Golden Demo injects `GOLDEN_DEMO_FS_ROOT=/path/to/tempdir` as an env var.\n")
+                f.write("Your code must read this env var to locate its working directory. Example:\n\n")
+                f.write("```python\n")
+                f.write("import os\n")
+                f.write("fs_root = os.environ.get('GOLDEN_DEMO_FS_ROOT', '.')\n")
+                f.write("input_path = os.path.join(fs_root, 'input.txt')\n")
+                f.write("```\n\n")
+                f.write("```js\n")
+                f.write("const fsRoot = process.env.GOLDEN_DEMO_FS_ROOT || '.';\n")
+                f.write("const inputPath = path.join(fsRoot, 'input.txt');\n")
+                f.write("```\n")
+
 
     elif effect == "http":
         if not os.path.exists(os.path.join(fixture_dir, "http_routes.json")):
