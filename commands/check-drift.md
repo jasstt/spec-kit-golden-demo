@@ -1,5 +1,5 @@
 ---
-description: "Executes golden examples against real implementations. Uses fixture/resource sandbox for side-effecting code: filesystem (tempdir), HTTP (local server), DB (SQLite). Pure vectors use semantic output comparison."
+description: "Executes golden examples against real implementations. Uses fixture/resource sandbox for side-effecting code, HTTP proxy injection for plain HTTP calls, and optional gated snapshots for empty pure golden files."
 ---
 
 # Golden Demo — Behavioral Drift Check
@@ -8,37 +8,51 @@ This command runs automatically after `/speckit.implement`.
 
 **Side-effect isolation model:**
 - `pure` → semantic output comparison
-- `filesystem` → tempdir seeded from `fixtures/vector_N/fs/`, real code runs with that `cwd`, file state compared after
-- `http` → local HTTP server with routes from `fixtures/vector_N/http_routes.json`, `BASE_URL` injected into subprocess env
+- `filesystem` → tempdir seeded from `fixtures/vector_N/fs/`, exposed as `GOLDEN_DEMO_FS_ROOT`
+- `http` → local HTTP fixture server with routes from `fixtures/vector_N/http_routes.json`; `BASE_URL`, `HTTP_PROXY`, and `HTTPS_PROXY` are injected into the subprocess env copy
 - `db` → disposable SQLite seeded from `fixtures/vector_N/schema.sql` + `seed.sql`, `DATABASE_URL` injected into subprocess env
 - anything else → `[UNSUPPORTED]` — not skipped silently, explicitly reported
 
-> **Note:** Real code must read `BASE_URL` / `DATABASE_URL` / `cwd` from its environment.
-> This is standard 12-factor config practice. If your implementation hardcodes these,
-> Golden Demo reports `implementation_not_fixture_configurable`, not a drift score.
+> **Note:** Real code should read `GOLDEN_DEMO_FS_ROOT` / `BASE_URL` / `DATABASE_URL` from its environment.
+> For plain HTTP calls, Golden Demo can also inject a forward proxy without changing the real code.
+> HTTPS interception is intentionally out of scope for this version because CONNECT tunneling hides the request path.
 
 ```bash
 python3 - << 'EOF'
 import os, re, sys, importlib.util, ast, json, subprocess, shutil, tempfile, threading
 from datetime import datetime
+from urllib.parse import urlsplit
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 
 golden_demo_mode = os.environ.get("GOLDEN_DEMO_MODE", "warn").lower()
+auto_approve_snapshot = "--auto-approve-snapshot" in sys.argv
 spec_dir         = ".specify/golden-demo"
 golden_dir       = os.path.join(spec_dir, "golden")
 fixtures_dir     = os.path.join(spec_dir, "fixtures")
 test_vectors_path = os.path.join(spec_dir, "test-vectors.md")
 report_path      = os.path.join(spec_dir, "drift-report.md")
 config_path      = os.path.join(spec_dir, "config.json")
+suggestions_path = os.path.join(spec_dir, "suggestions.md")
 
-config = {"real_cmd": "python sum_list.py", "input_method": "auto", "input_size_threshold_bytes": 4096}
+config = {
+    "real_cmd": "python sum_list.py",
+    "input_method": "auto",
+    "input_size_threshold_bytes": 4096,
+    "snapshot_mode": "off"
+}
 if os.path.exists(config_path):
     with open(config_path) as f:
         try: config.update(json.load(f))
         except Exception as e: print(f"Warning: config.json parse error ({e})")
 else:
+    os.makedirs(spec_dir, exist_ok=True)
     with open(config_path, "w") as f: json.dump(config, f, indent=2)
+
+snapshot_mode = str(config.get("snapshot_mode", "off")).lower()
+if snapshot_mode not in {"off", "gated"}:
+    print(f"Warning: unsupported snapshot_mode={snapshot_mode!r}; using 'off'.")
+    snapshot_mode = "off"
 
 if not os.path.exists(test_vectors_path):
     print("Golden Demo: no test vectors found. Run /speckit.plan first.")
@@ -122,6 +136,59 @@ def compare_files(actual_dir, expected_dir):
     score = round(mismatches / len(expected), 2)
     return score, "exact" if score == 0.0 else "file_content_partial"
 
+def is_empty_golden(path):
+    if not os.path.exists(path):
+        return True
+    with open(path, "r", encoding="utf-8") as f:
+        text = f.read()
+    if not text.strip():
+        return True
+    if "TODO: Implement this pure function" in text:
+        return True
+    return bool(re.search(r"def\s+execute\s*\([^)]*\):[\s\S]*?\bpass\b\s*$", text))
+
+def snapshot_source(vec, value):
+    literal = repr(value)
+    return (
+        f"# Golden Example for Vector {vec['id']}\n"
+        f"# Criteria: {vec.get('criteria', '')}\n"
+        "# Snapshot captured from real implementation after human approval.\n"
+        "# WARNING: this captures current behavior, not necessarily correct behavior.\n\n"
+        "def execute(input_data):\n"
+        f"    return {literal}\n"
+    )
+
+def write_snapshot_golden(path, vec, value):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(snapshot_source(vec, value))
+
+def append_snapshot_suggestion(vec, path, value):
+    os.makedirs(spec_dir, exist_ok=True)
+    with open(suggestions_path, "a", encoding="utf-8") as f:
+        f.write("\n## Snapshot pending human review\n")
+        f.write(f"- Vector: {vec['id']}\n")
+        f.write(f"- Criteria: {vec.get('criteria', '')}\n")
+        f.write(f"- Target golden file: {path}\n")
+        f.write(f"- Real code produced: {value!r}\n\n")
+        f.write("Suggested golden, if a reviewer accepts this behavior:\n")
+        f.write("```python\n")
+        f.write(snapshot_source(vec, value))
+        f.write("```\n")
+
+def read_snapshot_approval(value):
+    prompt = f"No golden reference exists. Real code produced: {value!r}. Accept this as golden truth? [y/N]: "
+    try:
+        with open('/dev/tty', 'r') as tty:
+            print(prompt, end="", flush=True)
+            return tty.readline().strip().lower()
+    except Exception:
+        try:
+            return input(prompt).strip().lower()
+        except EOFError:
+            pass
+    return None
+
 # ─── SANDBOX CLASSES ──────────────────────────────────────────────────────────
 
 class FilesystemSandbox:
@@ -155,7 +222,12 @@ class FilesystemSandbox:
 
 
 class HTTPSandbox:
-    """Spin up a local HTTP server with fixture routes, inject BASE_URL into subprocess."""
+    """Local fixture server plus subprocess-scoped HTTP proxy env injection.
+
+    Plain HTTP clients can call http://api.example.com/path unchanged when they
+    honor HTTP_PROXY. HTTPS CONNECT is recorded but not intercepted in this
+    version because the encrypted request path is inside the tunnel.
+    """
     def __init__(self, fixture_dir):
         self.fixture_dir = fixture_dir
         self.server = None
@@ -173,7 +245,32 @@ class HTTPSandbox:
 
         recorded = self.recorded_calls
 
+        def split_target(raw_target, headers):
+            parsed = urlsplit(raw_target)
+            if parsed.scheme and parsed.netloc:
+                path = parsed.path or "/"
+                if parsed.query:
+                    path += "?" + parsed.query
+                return parsed.geturl(), parsed.netloc, path
+            return None, headers.get("Host", ""), raw_target or "/"
+
+        def route_matches(route, method, url, host, path):
+            if route.get("method") != method:
+                return False
+            if route.get("url") and route.get("url") != url:
+                return False
+            if route.get("host") and route.get("host") != host:
+                return False
+            if route.get("path") and route.get("path") != path:
+                return False
+            return bool(route.get("url") or route.get("path"))
+
         class Handler(BaseHTTPRequestHandler):
+            def do_CONNECT(self):
+                recorded.append({"method": "CONNECT", "url": None, "host": self.path, "path": self.path, "body": ""})
+                self.send_response(501)
+                self.end_headers()
+
             def do_GET(self):  self._handle("GET")
             def do_POST(self): self._handle("POST")
             def do_PUT(self):  self._handle("PUT")
@@ -181,9 +278,10 @@ class HTTPSandbox:
             def _handle(self, method):
                 length = int(self.headers.get("Content-Length", 0))
                 body = self.rfile.read(length).decode("utf-8") if length else ""
-                recorded.append({"method": method, "path": self.path, "body": body})
+                url, host, path = split_target(self.path, self.headers)
+                recorded.append({"method": method, "url": url, "host": host, "path": path, "body": body})
                 for route in routes:
-                    if route["method"] == method and route["path"] == self.path:
+                    if route_matches(route, method, url, host, path):
                         resp = json.dumps(route.get("response", {})).encode()
                         self.send_response(route.get("status", 200))
                         self.send_header("Content-Type", "application/json")
@@ -199,7 +297,18 @@ class HTTPSandbox:
         self.port = self.server.server_address[1]
         t = threading.Thread(target=self.server.serve_forever, daemon=True)
         t.start()
-        return {"cwd": None, "env": {"BASE_URL": f"http://127.0.0.1:{self.port}"}, "input_override": None}
+        proxy_url = f"http://127.0.0.1:{self.port}"
+        return {
+            "cwd": None,
+            "env": {
+                "BASE_URL": proxy_url,
+                "HTTP_PROXY": proxy_url,
+                "HTTPS_PROXY": proxy_url,
+                "NODE_TLS_REJECT_UNAUTHORIZED": "0",
+                "PYTHONHTTPSVERIFY": "0"
+            },
+            "input_override": None
+        }
 
     def compare_state(self):
         expected_path = os.path.join(self.fixture_dir, "http_expected_calls.json")
@@ -207,9 +316,14 @@ class HTTPSandbox:
             return 0.0, "no_expected_calls_file"
         with open(expected_path) as f:
             expected = json.load(f)
-        if self.recorded_calls == expected:
-            return 0.0, "exact"
-        return 1.0, f"calls_mismatch (recorded {len(self.recorded_calls)}, expected {len(expected)})"
+        if len(expected) != len(self.recorded_calls):
+            return 1.0, f"calls_mismatch (recorded {len(self.recorded_calls)}, expected {len(expected)})"
+        for idx, exp in enumerate(expected):
+            act = self.recorded_calls[idx]
+            for key, value in exp.items():
+                if act.get(key) != value:
+                    return 1.0, f"calls_mismatch at {idx}: {key}={act.get(key)!r}, expected {value!r}"
+        return 0.0, "exact"
 
     def teardown(self):
         if self.server: self.server.shutdown()
@@ -328,7 +442,7 @@ def run_real(json_input, sandbox_ctx=None):
 # ─── MAIN LOOP ────────────────────────────────────────────────────────────────
 
 results, skipped = [], []
-total_executed = pass_count = fail_count = error_count = unsupported_count = 0
+total_executed = pass_count = fail_count = error_count = unsupported_count = snapshot_pending_count = 0
 
 for vec in vectors:
     vid = vec.get("id", "?")
@@ -337,24 +451,27 @@ for vec in vectors:
         skipped.append({"id": vid, "reason": "Not pending"})
         continue
 
+    side_effects = vec.get("side_effects", [])
+    is_pure = vec.get("is_pure", True) and not side_effects
+
     # Find golden
     golden_path = os.path.join(golden_dir, f"vector_{vid}_golden.py")
     if not os.path.exists(golden_path) and "." in vid:
-        golden_path = os.path.join(golden_dir, f"vector_{vid.split('.')[0]}_golden.py")
-    if not os.path.exists(golden_path):
-        skipped.append({"id": vid, "reason": "Golden template not implemented"})
-        continue
+        fallback_path = os.path.join(golden_dir, f"vector_{vid.split('.')[0]}_golden.py")
+        if os.path.exists(fallback_path):
+            golden_path = fallback_path
 
-    try:
-        golden_mod = load_module(f"golden_{vid}", golden_path)
-        if not hasattr(golden_mod, "execute"):
-            raise AttributeError("Missing execute function")
-    except Exception as e:
-        skipped.append({"id": vid, "reason": f"Golden load error: {e}"})
+    golden_empty = is_empty_golden(golden_path)
+    if golden_empty and snapshot_mode != "gated":
+        skipped.append({"id": vid, "reason": "Golden template missing or empty"})
         continue
-
-    side_effects = vec.get("side_effects", [])
-    is_pure = vec.get("is_pure", True) and not side_effects
+    if golden_empty and not is_pure:
+        snapshot_pending_count += 1
+        results.append({"id": vid, "criteria": vec.get("criteria",""), "status": "SNAPSHOT_PENDING",
+                        "input": vec.get("input",""), "golden_out": "N/A", "real_out": "N/A",
+                        "drift": "N/A", "match_type": "snapshot_pending",
+                        "notes": "Gated snapshots only support pure vectors. Please write the golden implementation manually."})
+        continue
 
     # Resolve sandbox
     sandbox = None
@@ -367,7 +484,6 @@ for vec in vectors:
                         "drift": "N/A", "match_type": "unsupported", "notes": str(e)})
         continue
 
-    total_executed += 1
     input_str = vec.get("input", "not specified")
     try:    input_data = ast.literal_eval(input_str)
     except: input_data = input_str
@@ -383,35 +499,74 @@ for vec in vectors:
                     f"Create .specify/golden-demo/fixtures/vector_{vid}/ with required files."
                 )
 
-        # Run golden (pure Python, no sandbox needed)
-        golden_out = golden_mod.execute(input_data)
-
-        # Run real subprocess (with sandbox env/cwd if applicable)
         json_input = json.dumps(input_data)
-        real_out = run_real(json_input, sandbox_ctx)
 
-        # Compare
-        if is_pure:
-            drift, match_type = compare(golden_out, real_out)
+        if golden_empty and snapshot_mode == "gated":
+            real_out = run_real(json_input, sandbox_ctx)
+            if auto_approve_snapshot:
+                write_snapshot_golden(golden_path, vec, real_out)
+                golden_out = real_out
+                drift, match_type = 0.0, "snapshot_accepted"
+                status = "PASS"
+                pass_count += 1
+                total_executed += 1
+                notes = "Snapshot accepted via explicit --auto-approve-snapshot flag."
+            else:
+                ans = read_snapshot_approval(real_out)
+                if ans == "y":
+                    write_snapshot_golden(golden_path, vec, real_out)
+                    golden_out = real_out
+                    drift, match_type = 0.0, "snapshot_accepted"
+                    status = "PASS"
+                    pass_count += 1
+                    total_executed += 1
+                    notes = "Snapshot accepted by human reviewer."
+                else:
+                    snapshot_pending_count += 1
+                    if ans is None:
+                        append_snapshot_suggestion(vec, golden_path, real_out)
+                        notes = "snapshot pending human review; suggestion written to suggestions.md"
+                    else:
+                        notes = "Please write the golden implementation manually."
+                    results.append({"id": vid, "criteria": vec.get("criteria",""), "status": "SNAPSHOT_PENDING",
+                                    "input": input_str, "golden_out": "N/A", "real_out": real_out,
+                                    "drift": "N/A", "match_type": "snapshot_pending", "notes": notes})
+                    continue
         else:
-            # For sandboxed vectors: compare golden output + side-effect state
-            output_drift, output_match = compare(golden_out, real_out)
-            state_drift,  state_match  = sandbox.compare_state()
-            # Weighted: output 50%, state 50%
-            drift = round((output_drift + (state_drift or 0.0)) / 2, 2)
-            match_type = f"output:{output_match} + state:{state_match}"
+            try:
+                golden_mod = load_module(f"golden_{vid}", golden_path)
+                if not hasattr(golden_mod, "execute"):
+                    raise AttributeError("Missing execute function")
+            except Exception as e:
+                skipped.append({"id": vid, "reason": f"Golden load error: {e}"})
+                continue
 
-        status = "PASS" if drift == 0.0 else "FAIL"
-        if status == "PASS": pass_count += 1
-        else:                fail_count += 1
+            total_executed += 1
+            golden_out = golden_mod.execute(input_data)
+            real_out = run_real(json_input, sandbox_ctx)
+
+            if is_pure:
+                drift, match_type = compare(golden_out, real_out)
+            else:
+                # For sandboxed vectors: compare golden output + side-effect state
+                output_drift, output_match = compare(golden_out, real_out)
+                state_drift,  state_match  = sandbox.compare_state()
+                # Weighted: output 50%, state 50%
+                drift = round((output_drift + (state_drift or 0.0)) / 2, 2)
+                match_type = f"output:{output_match} + state:{state_match}"
+
+            status = "PASS" if drift == 0.0 else "FAIL"
+            if status == "PASS": pass_count += 1
+            else:                fail_count += 1
+            notes = ""
 
         results.append({"id": vid, "criteria": vec.get("criteria",""), "status": status,
                         "input": input_str, "golden_out": golden_out, "real_out": real_out,
-                        "drift": drift, "match_type": match_type, "notes": ""})
+                        "drift": drift, "match_type": match_type, "notes": notes})
 
     except subprocess.CalledProcessError as e:
         error_count += 1
-        msg = e.stderr[:300] if e.stderr else f"exit {e.returncode}"
+        msg = e.stderr[:1200] if e.stderr else f"exit {e.returncode}"
         results.append({"id": vid, "criteria": vec.get("criteria",""), "status": "ERROR",
                         "input": input_str, "golden_out": "N/A", "real_out": "N/A",
                         "drift": "N/A", "match_type": "error", "notes": msg})
@@ -419,7 +574,7 @@ for vec in vectors:
         error_count += 1
         results.append({"id": vid, "criteria": vec.get("criteria",""), "status": "ERROR",
                         "input": input_str, "golden_out": "N/A", "real_out": "N/A",
-                        "drift": "N/A", "match_type": "error", "notes": str(e)[:300]})
+                        "drift": "N/A", "match_type": "error", "notes": str(e)[:1200]})
     finally:
         if sandbox:
             try: sandbox.teardown()
@@ -432,10 +587,11 @@ drift_score = round(sum(r["drift"] for r in executed_with_scores) / len(executed
               if executed_with_scores else 0.0
 
 report = f"# Golden Demo Drift Report\nGenerated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-report += f"MODE: {golden_demo_mode}\n\n"
+report += f"MODE: {golden_demo_mode}\n"
+report += f"SNAPSHOT_MODE: {snapshot_mode}\n\n"
 report += "## Summary\n"
 report += f"- Total: {len(vectors)}  Executed: {total_executed}  "
-report += f"PASS: {pass_count}  FAIL: {fail_count}  ERROR: {error_count}  UNSUPPORTED: {unsupported_count}  Skipped: {len(skipped)}\n\n"
+report += f"PASS: {pass_count}  FAIL: {fail_count}  ERROR: {error_count}  UNSUPPORTED: {unsupported_count}  SNAPSHOT_PENDING: {snapshot_pending_count}  Skipped: {len(skipped)}\n\n"
 report += f"## Overall Drift Score: {drift_score:.2f}\n\n"
 report += "## Results\n\n"
 for res in results:
@@ -451,11 +607,14 @@ for s in skipped: report += f"- Vector {s['id']}: {s['reason']}\n"
 with open(report_path, "w", encoding="utf-8") as f:
     f.write(report)
 
-print(f"\nGolden Demo v0.4.1")
+print(f"\nGolden Demo v0.4.2")
 print("-" * 40)
-print(f"PASS: {pass_count}  FAIL: {fail_count}  ERROR: {error_count}  UNSUPPORTED: {unsupported_count}")
+print(f"PASS: {pass_count}  FAIL: {fail_count}  ERROR: {error_count}  UNSUPPORTED: {unsupported_count}  SNAPSHOT_PENDING: {snapshot_pending_count}")
 print(f"Drift Score: {drift_score:.2f}  |  Report: {report_path}")
 print("-" * 40 + "\n")
+
+if snapshot_pending_count > 0:
+    print("[!] Snapshot pending human review. No golden file was written without approval.")
 
 if drift_score > 0 or error_count > 0:
     if golden_demo_mode == "strict":

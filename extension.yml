@@ -3,8 +3,8 @@ schema_version: "1.0"
 extension:
   id: "golden-demo"
   name: "Golden Demo"
-  version: "0.4.1"
-  description: "Golden Demo — Deterministic Behavioral Drift Oracle. v0.4.1 adds hybrid LLM+regex spec parsing, fixture/resource sandbox for side-effect isolation (filesystem/HTTP/DB), and semantic comparison (numeric tolerance, type coercion, partial list scoring)."
+  version: "0.4.2"
+  description: "Golden Demo — Deterministic Behavioral Drift Oracle. v0.4.2 adds subprocess-scoped HTTP proxy injection for plain HTTP fixtures and gated, human-approved snapshot initialization for empty pure golden files."
   author: "jasstt"
   repository: "https://github.com/jasstt/spec-kit-golden-demo"
   license: "MIT"
@@ -33,6 +33,11 @@ extension:
       - compare_files: checks only expected files, ignores extra files in actual dir
       - extract-vectors: removed mock references, replaced with fixture scaffold generation
       - README and extension.yml: corrected mock claims to fixture sandbox description
+    v0.4.2:
+      - HTTP proxy injection for plain http:// calls via subprocess-scoped HTTP_PROXY / HTTPS_PROXY
+      - HTTPS CONNECT attempts are documented as out of scope unless future MITM support is added
+      - GATED snapshot mode: "off" | "gated"; no automatic snapshot mode
+      - Empty pure golden files can be initialized only after human approval or explicit operator approval flag
 
 requires:
   speckit_version: ">=0.1.0"

@@ -195,12 +195,12 @@ def write_fixture_scaffold(vec_id, criteria, side_effects):
         if not os.path.exists(os.path.join(fixture_dir, "http_routes.json")):
             with open(os.path.join(fixture_dir, "http_routes.json"), "w") as f:
                 json.dump([
-                    {"method": "GET", "path": "/example", "status": 200, "response": {"ok": True}},
-                    {"method": "POST", "path": "/example", "status": 201, "response": {"created": True}}
+                    {"method": "GET", "host": "api.example.com", "path": "/users", "status": 200, "response": [{"id": 1, "name": "Ada"}]},
+                    {"method": "POST", "host": "api.example.com", "path": "/users", "status": 201, "response": {"created": True}}
                 ], f, indent=2)
         if not os.path.exists(os.path.join(fixture_dir, "http_expected_calls.json")):
             with open(os.path.join(fixture_dir, "http_expected_calls.json"), "w") as f:
-                json.dump([{"method": "GET", "path": "/example", "body": ""}], f, indent=2)
+                json.dump([{"method": "GET", "host": "api.example.com", "path": "/users", "body": ""}], f, indent=2)
         if not os.path.exists(readme_path):
             with open(readme_path, "w") as f:
                 f.write(f"# Fixture: Vector {vec_id} (http)\n\n")
@@ -210,8 +210,10 @@ def write_fixture_scaffold(vec_id, criteria, side_effects):
                 f.write("## Expected Calls\n")
                 f.write("Edit `http_expected_calls.json` to define which HTTP calls your real code should make.\n\n")
                 f.write("## Real Command\n")
-                f.write("Your `real_cmd` will receive `BASE_URL=http://127.0.0.1:<port>` as an environment variable.\n")
-                f.write("Your code must use `BASE_URL` instead of a hardcoded URL.\n")
+                f.write("Your `real_cmd` receives `BASE_URL=http://127.0.0.1:<port>` for fixture-aware code.\n")
+                f.write("It also receives `HTTP_PROXY` and `HTTPS_PROXY` pointing at the fixture server.\n")
+                f.write("Plain `http://` calls to external hostnames can be intercepted without code changes.\n")
+                f.write("HTTPS calls are not intercepted in this version; CONNECT hides the encrypted request path.\n")
 
     elif effect == "db":
         if not os.path.exists(os.path.join(fixture_dir, "schema.sql")):
