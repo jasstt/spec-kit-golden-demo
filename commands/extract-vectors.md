@@ -96,24 +96,60 @@ def call_llm_parse(spec_text):
 # ─── REGEX FALLBACK ───────────────────────────────────────────────────────────
 
 def regex_parse(text):
-    criteria_lines = []
-    for idx, line in enumerate(text.split('\n')):
-        line = line.strip()
-        if line.startswith('-') and 'return' in line.lower():
-            criteria_lines.append((idx + 1, line.lstrip('- ')))
+    literal = r"(?:`[^`\n]+`|\[[^\]\n]*\]|\"[^\"\n]*\"|'[^'\n]*'|-?\d+(?:\.\d+)?|\{[^}\n]*\}|\b(?:true|false|null|None|True|False)\b)"
+    patterns = [
+        # Given `[1,2,3]`, returns `6`
+        re.compile(rf"\bgiven\s+(?P<input>{literal})\s*,?\s*(?:function\s+)?returns?\s+(?P<output>{literal})", re.IGNORECASE),
+        # Given input [1,2,3], function returns 6
+        re.compile(rf"\bgiven\s+input\s+(?P<input>{literal}).*?\b(?:function\s+)?returns?\s+(?P<output>{literal})", re.IGNORECASE),
+        # Input: [1,2,3] -> Output: 6
+        re.compile(rf"\binput\s*:\s*(?P<input>{literal})\s*(?:->|=>|→|,|;)\s*output\s*:\s*(?P<output>{literal})", re.IGNORECASE),
+        # Input [1,2,3] returns 6
+        re.compile(rf"\binput\s+(?P<input>{literal}).*?\breturns?\s+(?P<output>{literal})", re.IGNORECASE),
+    ]
+
+    def clean_literal(value):
+        value = value.strip()
+        if len(value) >= 2 and value[0] == "`" and value[-1] == "`":
+            return value[1:-1].strip()
+        return value
+
+    def infer_input_type(value):
+        stripped = value.strip()
+        if stripped.startswith("["):
+            return "list"
+        if stripped.startswith("{"):
+            return "dict"
+        if stripped.startswith(("\"", "'")):
+            return "str"
+        if re.fullmatch(r"-?\d+", stripped):
+            return "int"
+        if re.fullmatch(r"-?\d+\.\d+", stripped):
+            return "float"
+        if stripped.lower() in {"true", "false"}:
+            return "bool"
+        if stripped.lower() in {"null", "none"}:
+            return "null"
+        return "unknown"
+
     results = []
-    for line_num, text in criteria_lines:
-        input_val = None
-        expected_val = None
-        input_match = re.search(r'(?:input|list|type) (type:\w+\[?\w*\]?|\[.*?\]|\w+)', text, re.IGNORECASE)
-        if input_match:
-            input_val = input_match.group(1)
-        return_match = re.search(r'returns? (\[.*?\]|\w+)', text, re.IGNORECASE)
-        if return_match:
-            expected_val = return_match.group(1)
+    for idx, raw_line in enumerate(text.split('\n')):
+        line = raw_line.strip()
+        if not line:
+            continue
+        candidate = re.sub(r"^\s*(?:[-*]|\d+[.)])\s*", "", line)
+        match = None
+        for pattern in patterns:
+            match = pattern.search(candidate)
+            if match:
+                break
+        if not match:
+            continue
+        input_val = clean_literal(match.group("input"))
+        expected_val = clean_literal(match.group("output"))
         results.append({
-            "criteria": text,
-            "input_type": "unknown",
+            "criteria": candidate,
+            "input_type": infer_input_type(input_val),
             "example_input": input_val,
             "expected_output": expected_val,
             "is_pure": True,

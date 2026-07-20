@@ -3,8 +3,8 @@ schema_version: "1.0"
 extension:
   id: "golden-demo"
   name: "Golden Demo"
-  version: "0.4.2"
-  description: "Golden Demo — Deterministic Behavioral Drift Oracle. v0.4.2 adds subprocess-scoped HTTP proxy injection for plain HTTP fixtures and gated, human-approved snapshot initialization for empty pure golden files."
+  version: "0.4.3"
+  description: "Golden Demo — Deterministic Behavioral Drift Oracle. v0.4.3 fixes regex extraction false positives by requiring structured Given/Input + Returns/Output patterns with concrete literal values."
   author: "jasstt"
   repository: "https://github.com/jasstt/spec-kit-golden-demo"
   license: "MIT"
@@ -38,6 +38,8 @@ extension:
       - HTTPS CONNECT attempts are documented as out of scope unless future MITM support is added
       - GATED snapshot mode: "off" | "gated"; no automatic snapshot mode
       - Empty pure golden files can be initialized only after human approval or explicit operator approval flag
+    v0.4.3:
+      - "Fixed: extraction regex was matching loose keywords (e.g. 'of', 'their') as false-positive input/output candidates. Now requires structured Given/Input + Returns/Output pattern with concrete literal values."
 
 requires:
   speckit_version: ">=0.1.0"

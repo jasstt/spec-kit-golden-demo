@@ -29,6 +29,9 @@
 - **HTTP Proxy Injection**: Plain `http://` calls can be intercepted through subprocess-scoped `HTTP_PROXY` without changing production code.
 - **GATED Snapshot Mode**: Empty pure golden files can be initialized from real output only after explicit human approval. There is no `snapshot_mode: "auto"`.
 
+**v0.4.3 (Safer regex extraction):**
+- **Structured Regex Fallback**: Regex extraction no longer guesses from loose keywords. It requires a concrete input literal and a concrete output literal in a supported format.
+
 ## Warn vs. Strict Mode
 
 Golden Demo can act as a strict gatekeeper in your CI/CD pipelines. It is controlled by the `GOLDEN_DEMO_MODE` environment variable.
@@ -50,6 +53,28 @@ Configure `.specify/golden-demo/config.json`:
 }
 ```
 If `input_method` is `"arg"`, inputs are passed via CLI arguments. If `"stdin"`, they are piped. Large inputs automatically fall back to `stdin` based on the threshold.
+
+## Accepted Regex Fallback Spec Formats
+
+When no LLM provider is configured, Golden Demo uses a deterministic regex fallback. This fallback is intentionally strict: it only extracts vectors when both input and output are written as concrete literal values.
+
+Accepted examples:
+
+```text
+- Given `[1,2,3]`, returns `6`
+- Given input [1,2,3], function returns 6.
+- Input: [1,2,3] -> Output: 6
+- Input: {"temperature": -5, "max": 0} -> Output: true
+```
+
+The fallback accepts literals written in backticks, square brackets, quotes, numbers, JSON-like objects, booleans, or null-like values. It will not extract vague natural language such as:
+
+```text
+- The result of their computation must be validated before returns are processed.
+- The cold chain validator should return true when temperatures stay within threshold.
+```
+
+This is intentional. The regex fallback prefers false negatives over false positives. If your acceptance criteria are natural-language only, either rewrite them in one of the structured formats above or use the optional LLM parser with human review.
 
 ## HTTP Proxy Injection — Scope
 
@@ -106,7 +131,7 @@ specify extension add --from https://github.com/jasstt/spec-kit-golden-demo/arch
 
 ```bash
 specify extension list
-# ✓ Golden Demo (v0.4.2)
+# ✓ Golden Demo (v0.4.3)
 ```
 
 ## File layout
