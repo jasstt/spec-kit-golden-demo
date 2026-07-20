@@ -25,6 +25,10 @@
 - **Fixture Sandbox**: Side-effecting vectors get a disposable sandbox — filesystem (tempdir + seed), HTTP (local server + route fixtures), DB (SQLite + schema/seed). Real subprocess runs against these, not production resources.
 - **Semantic Comparison**: Drift is no longer binary. `6 vs 6.0` = 0.0 (numeric_tolerance). `[1,2,4] vs [1,2,3]` = 0.33 (partial_list). Match type is shown in the drift report.
 
+**v0.4.2 (Human-gated baselines):**
+- **HTTP Proxy Injection**: Plain `http://` calls can be intercepted through subprocess-scoped `HTTP_PROXY` without changing production code.
+- **GATED Snapshot Mode**: Empty pure golden files can be initialized from real output only after explicit human approval. There is no `snapshot_mode: "auto"`.
+
 ## Warn vs. Strict Mode
 
 Golden Demo can act as a strict gatekeeper in your CI/CD pipelines. It is controlled by the `GOLDEN_DEMO_MODE` environment variable.
@@ -46,6 +50,39 @@ Configure `.specify/golden-demo/config.json`:
 }
 ```
 If `input_method` is `"arg"`, inputs are passed via CLI arguments. If `"stdin"`, they are piped. Large inputs automatically fall back to `stdin` based on the threshold.
+
+## HTTP Proxy Injection — Scope
+
+Golden Demo's proxy injection currently supports plain HTTP (`http://`) calls without any code changes. HTTPS calls are NOT intercepted in this version: the CONNECT tunnel handshake encrypts the request path before it reaches the fixture server, so a standard forward proxy cannot see or match it.
+
+If your real implementation calls HTTPS endpoints, either:
+- Point your test config at an `http://` variant of the endpoint, or
+- Wait for MITM proxy support (tracked as a future version), or
+- Point `real_cmd` at a fixture-aware test harness for this vector
+
+This is an intentional scope decision, not an oversight — MITM interception requires certificate generation and trust-chain handling that adds significant platform-specific complexity.
+
+## GATED Snapshot Mode
+
+Golden Demo can initialize an empty pure golden file from the real implementation only when snapshot mode is explicitly gated:
+
+```json
+{
+  "real_cmd": "python sum_list.py",
+  "input_method": "stdin",
+  "snapshot_mode": "gated"
+}
+```
+
+Supported values are `"off"` and `"gated"`. There is intentionally no `"auto"` mode. In interactive runs, Golden Demo shows the real output and asks:
+
+```text
+No golden reference exists. Real code produced: [output]. Accept this as golden truth? [y/N]
+```
+
+If the reviewer answers `y`, Golden Demo writes a simple golden function returning that reviewed value. If the reviewer answers `N` or presses Enter, nothing is written. In non-interactive environments, snapshots are saved only as pending suggestions unless an operator passes an explicit approval flag.
+
+⚠️ Snapshot mode captures CURRENT behavior, not CORRECT behavior. If the implementation has a bug on first run, accepting the snapshot will make that bug the accepted baseline. Only use gated snapshot mode for pure functions you have manually verified, or combine with a second reviewer's sign-off.
 
 ## Auto-Golden (LLM Generator)
 
@@ -69,7 +106,7 @@ specify extension add --from https://github.com/jasstt/spec-kit-golden-demo/arch
 
 ```bash
 specify extension list
-# ✓ Golden Demo (v0.4.1)
+# ✓ Golden Demo (v0.4.2)
 ```
 
 ## File layout
