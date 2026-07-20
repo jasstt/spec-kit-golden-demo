@@ -18,6 +18,7 @@ python3 - << 'EOF'
 import os
 import sys
 import json
+import getpass
 import urllib.request
 import urllib.error
 import textwrap
@@ -28,14 +29,78 @@ golden_dir = os.path.join(spec_dir, "golden")
 # Check arguments
 auto_approve = "--auto-approve" in sys.argv
 
+# Interactive input helpers
+def has_prompt_target():
+    return sys.stdin.isatty() or os.path.exists("/dev/tty")
+
+def read_prompt_line(prompt):
+    try:
+        if os.path.exists("/dev/tty") and not sys.stdin.isatty():
+            with open("/dev/tty", "r", encoding="utf-8") as tty:
+                print(prompt, end="", flush=True)
+                return tty.readline().strip()
+    except OSError:
+        pass
+    if not sys.stdin.isatty():
+        return None
+    try:
+        return input(prompt).strip()
+    except EOFError:
+        return None
+
+def read_secret(prompt):
+    if not has_prompt_target():
+        return None
+    try:
+        return getpass.getpass(prompt).strip()
+    except Exception as exc:
+        print(f"Golden Demo: Hidden input unavailable ({exc}); falling back to visible input.")
+        value = read_prompt_line(prompt)
+        return value.strip() if value else None
+
+def prompt_for_llm_api_key():
+    if not has_prompt_target():
+        return None, None
+
+    print("Golden Demo: No GEMINI_API_KEY or OPENAI_API_KEY found.")
+    print("Enter an API key for this run only, or press Enter to skip auto-golden.")
+    provider = read_prompt_line("Choose provider [gemini/openai/skip]: ")
+    if not provider:
+        return None, None
+
+    provider = provider.strip().lower()
+    if provider in {"skip", "s", "none", "no", "n"}:
+        return None, None
+    if provider in {"gemini", "g"}:
+        env_name = "GEMINI_API_KEY"
+    elif provider in {"openai", "o"}:
+        env_name = "OPENAI_API_KEY"
+    else:
+        print("Golden Demo: Unknown provider; skipping auto-golden.")
+        return None, None
+
+    api_key = read_secret(f"Enter your {env_name} for this run: ")
+    if not api_key:
+        print("Golden Demo: Empty API key; skipping auto-golden.")
+        return None, None
+
+    os.environ[env_name] = api_key
+    return env_name, api_key
+
 # Check API Keys
 openai_key = os.environ.get("OPENAI_API_KEY")
 gemini_key = os.environ.get("GEMINI_API_KEY")
 
 if not openai_key and not gemini_key:
-    print("Golden Demo: Neither OPENAI_API_KEY nor GEMINI_API_KEY found.")
-    print("Set GEMINI_API_KEY or OPENAI_API_KEY to use this command.")
-    sys.exit(0)
+    env_name, api_key = prompt_for_llm_api_key()
+    if env_name == "GEMINI_API_KEY":
+        gemini_key = api_key
+    elif env_name == "OPENAI_API_KEY":
+        openai_key = api_key
+    else:
+        print("Golden Demo: Neither OPENAI_API_KEY nor GEMINI_API_KEY found.")
+        print("Set a key in your environment, or enter one when prompted, to use this command.")
+        sys.exit(0)
 
 # Provider Priority: GEMINI_API_KEY > OPENAI_API_KEY
 # If both are set, Gemini is used (Golden Demo ecosystem is Gemini-first).
@@ -110,7 +175,7 @@ suggestions_md = "# Golden Demo — LLM Suggestions\n\n"
 
 # Interactive prompt helper
 def is_interactive():
-    return sys.stdin.isatty()
+    return has_prompt_target()
 
 can_prompt = is_interactive() and not auto_approve
 

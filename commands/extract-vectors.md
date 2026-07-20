@@ -20,6 +20,7 @@ import re
 import sys
 import json
 import random
+import getpass
 import urllib.request
 from datetime import datetime
 
@@ -40,6 +41,65 @@ if not content.strip():
     print("Golden Demo: spec.md / plan.md not found, skipping vector extraction")
     exit(0)
 
+# ─── API KEY PROMPT ───────────────────────────────────────────────────────────
+
+def has_prompt_target():
+    return sys.stdin.isatty() or os.path.exists("/dev/tty")
+
+def read_prompt_line(prompt):
+    try:
+        if os.path.exists("/dev/tty") and not sys.stdin.isatty():
+            with open("/dev/tty", "r", encoding="utf-8") as tty:
+                print(prompt, end="", flush=True)
+                return tty.readline().strip()
+    except OSError:
+        pass
+    if not sys.stdin.isatty():
+        return None
+    try:
+        return input(prompt).strip()
+    except EOFError:
+        return None
+
+def read_secret(prompt):
+    if not has_prompt_target():
+        return None
+    try:
+        return getpass.getpass(prompt).strip()
+    except Exception as exc:
+        print(f"Golden Demo: Hidden input unavailable ({exc}); falling back to visible input.")
+        value = read_prompt_line(prompt)
+        return value.strip() if value else None
+
+def prompt_for_llm_api_key():
+    if not has_prompt_target():
+        return None, None
+
+    print("Golden Demo: No GEMINI_API_KEY or OPENAI_API_KEY found.")
+    print("Enter an API key for this run only, or press Enter to continue with regex fallback.")
+    provider = read_prompt_line("Choose provider [gemini/openai/skip]: ")
+    if not provider:
+        return None, None
+
+    provider = provider.strip().lower()
+    if provider in {"skip", "s", "none", "no", "n"}:
+        return None, None
+    if provider in {"gemini", "g"}:
+        env_name = "GEMINI_API_KEY"
+    elif provider in {"openai", "o"}:
+        env_name = "OPENAI_API_KEY"
+    else:
+        print("Golden Demo: Unknown provider; continuing with regex fallback.")
+        return None, None
+
+    api_key = read_secret(f"Enter your {env_name} for this run: ")
+    if not api_key:
+        print("Golden Demo: Empty API key; continuing with regex fallback.")
+        return None, None
+
+    os.environ[env_name] = api_key
+    return env_name, api_key
+
 # ─── LLM PARSE ────────────────────────────────────────────────────────────────
 
 def call_llm_parse(spec_text):
@@ -47,7 +107,13 @@ def call_llm_parse(spec_text):
     openai_key = os.environ.get("OPENAI_API_KEY")
     gemini_key = os.environ.get("GEMINI_API_KEY")
     if not openai_key and not gemini_key:
-        return None
+        env_name, api_key = prompt_for_llm_api_key()
+        if env_name == "GEMINI_API_KEY":
+            gemini_key = api_key
+        elif env_name == "OPENAI_API_KEY":
+            openai_key = api_key
+        else:
+            return None
 
     prompt = (
         "You are a test vector extractor. Given a software specification, "

@@ -21,7 +21,7 @@
 - **CI/CD Gatekeeper**: Supports `warn` and `strict` modes to block PR merges when behavioral drift is detected.
 
 **v0.4.0 (Applicability improvements):**
-- **Hybrid Spec Parsing**: Uses LLM (Gemini-first, then OpenAI) to extract acceptance criteria from natural language. Falls back to regex silently if no API key is set.
+- **Hybrid Spec Parsing**: Uses LLM (Gemini-first, then OpenAI) to extract acceptance criteria from natural language. Falls back to regex if no API key is available or supplied.
 - **Fixture Sandbox**: Side-effecting vectors get a disposable sandbox — filesystem (tempdir + seed), HTTP (local server + route fixtures), DB (SQLite + schema/seed). Real subprocess runs against these, not production resources.
 - **Semantic Comparison**: Drift is no longer binary. `6 vs 6.0` = 0.0 (numeric_tolerance). `[1,2,4] vs [1,2,3]` = 0.33 (partial_list). Match type is shown in the drift report.
 
@@ -31,6 +31,9 @@
 
 **v0.4.3 (Safer regex extraction):**
 - **Structured Regex Fallback**: Regex extraction no longer guesses from loose keywords. It requires a concrete input literal and a concrete output literal in a supported format.
+
+**v0.4.4 (Interactive API keys):**
+- **One-run API key prompt**: If no `GEMINI_API_KEY` or `OPENAI_API_KEY` is set and the command is interactive, Golden Demo asks which provider to use and reads the API key for the current run only. The key is not written to config, source files, or disk.
 
 ## Warn vs. Strict Mode
 
@@ -117,7 +120,8 @@ You can automatically fill the empty golden templates using:
 ```
 **Important:**
 - **Provider priority:** If both `GEMINI_API_KEY` and `OPENAI_API_KEY` are set, Gemini is used (Golden Demo is Gemini-first). If only one is set, that provider is used automatically.
-- You must set either `OPENAI_API_KEY` or `GEMINI_API_KEY` in your environment.
+- If no key is set and the command is interactive, Golden Demo asks for the provider and API key, then scopes that key to the current command process only.
+- In non-interactive/CI environments, Golden Demo does not prompt or wait for input. Set `GEMINI_API_KEY` or `OPENAI_API_KEY` in the environment if you want LLM generation there.
 - The command will print proposed code to your console and wait for a `[y/N]` approval before saving anything to disk.
 - To bypass human approval in pipelines, pass the `--auto-approve` flag. Without it, non-interactive environments will skip writing to disk and save suggestions to `suggestions.md`.
 
@@ -131,7 +135,7 @@ specify extension add --from https://github.com/jasstt/spec-kit-golden-demo/arch
 
 ```bash
 specify extension list
-# ✓ Golden Demo (v0.4.3)
+# ✓ Golden Demo (v0.4.4)
 ```
 
 ## File layout
