@@ -17,7 +17,7 @@
 **v0.3.0 (Advanced Oracle Features):**
 - **Cross-Language Support**: Test implementations written in Node.js, Go, or Bash against Python golden examples via CLI args or `stdin`.
 - **Deterministic Fuzzing**: Automatically generates edge-case test vectors for generic types (`type:list[int]`) using a fixed seed (`42`).
-- **Auto-Golden Generation**: Opt-in `/speckit.auto-golden` command that uses LLMs to generate golden examples (requires explicit human `[y/n]` approval).
+- **Auto-Golden Generation**: Opt-in `/speckit.auto-golden` command that uses LLMs to generate golden examples. Later releases add example-output validation before writing.
 - **CI/CD Gatekeeper**: Supports `warn` and `strict` modes to block PR merges when behavioral drift is detected.
 
 **v0.4.0 (Applicability improvements):**
@@ -34,6 +34,10 @@
 
 **v0.4.4 (Interactive API keys):**
 - **One-run API key prompt**: If no `GEMINI_API_KEY` or `OPENAI_API_KEY` is set and the command is interactive, Golden Demo asks which provider to use and reads the API key for the current run only. The key is not written to config, source files, or disk.
+
+**v0.5.0 (Validated Auto-Golden):**
+- **Example-validated Auto-Golden**: `/speckit.auto-golden` now reads vector metadata from `test-vectors.md`, asks the LLM for `execute(input_data)`, and validates `execute(example_input) == expected_output` before writing.
+- **Safer write behavior**: Generated golden files are written automatically only after example validation passes. Failed validations require explicit `[y/N]` approval in interactive runs, otherwise they are reported as `SKIPPED` in `suggestions.md`.
 
 ## Warn vs. Strict Mode
 
@@ -122,8 +126,9 @@ You can automatically fill the empty golden templates using:
 - **Provider priority:** If both `GEMINI_API_KEY` and `OPENAI_API_KEY` are set, Gemini is used (Golden Demo is Gemini-first). If only one is set, that provider is used automatically.
 - If no key is set and the command is interactive, Golden Demo asks for the provider and API key, then scopes that key to the current command process only.
 - In non-interactive/CI environments, Golden Demo does not prompt or wait for input. Set `GEMINI_API_KEY` or `OPENAI_API_KEY` in the environment if you want LLM generation there.
-- The command will print proposed code to your console and wait for a `[y/N]` approval before saving anything to disk.
-- To bypass human approval in pipelines, pass the `--auto-approve` flag. Without it, non-interactive environments will skip writing to disk and save suggestions to `suggestions.md`.
+- The command validates generated code by running `execute(example_input)` and comparing it to the vector's expected output before writing.
+- If validation passes, the golden file is written. If validation fails, Golden Demo shows the generated code and asks for `[y/N]` approval in interactive runs.
+- In non-interactive environments, failed validations are never written automatically; they are saved as `SKIPPED` suggestions in `suggestions.md`.
 
 ## Installation
 
@@ -135,7 +140,7 @@ specify extension add --from https://github.com/jasstt/spec-kit-golden-demo/arch
 
 ```bash
 specify extension list
-# ✓ Golden Demo (v0.4.4)
+# ✓ Golden Demo (v0.5.0)
 ```
 
 ## File layout

@@ -3,8 +3,8 @@ schema_version: "1.0"
 extension:
   id: "golden-demo"
   name: "Golden Demo"
-  version: "0.4.4"
-  description: "Golden Demo — Deterministic Behavioral Drift Oracle. v0.4.4 prompts interactively for one-run LLM API keys without persisting secrets."
+  version: "0.5.0"
+  description: "Golden Demo — Deterministic Behavioral Drift Oracle. v0.5.0 adds validated Auto-Golden generation, strict regex extraction, and one-run LLM API key prompts."
   author: "jasstt"
   repository: "https://github.com/jasstt/spec-kit-golden-demo"
   license: "MIT"
@@ -44,6 +44,10 @@ extension:
       - "Added: interactive one-run API key prompt for extract-vectors and auto-golden when no GEMINI_API_KEY or OPENAI_API_KEY is set."
       - "Security: prompted API keys are scoped to the current command process and are not written to config, source files, or disk."
       - "CI behavior: non-interactive runs do not prompt or block; configure GEMINI_API_KEY or OPENAI_API_KEY in the environment to enable LLM calls."
+    v0.5.0:
+      - "Added: validated Auto-Golden generation reads test-vectors.md metadata, asks the LLM for execute(input_data), and runs execute(example_input) before writing golden files."
+      - "Safety: generated golden implementations are written automatically only when their output matches the vector's expected output."
+      - "Review flow: failed validations are shown to the user for [y/N] approval in interactive runs; otherwise they are reported as SKIPPED in suggestions.md without overwriting golden files."
 
 requires:
   speckit_version: ">=0.1.0"
@@ -60,7 +64,7 @@ provides:
 
     - name: "speckit.golden-demo.auto-golden"
       file: "commands/auto-golden.md"
-      description: "Automatically writes pure function golden templates using LLM. Requires human approval."
+      description: "Generates pure function golden templates using an LLM, validates them against example input/output, and asks for approval when validation fails."
 
 hooks:
   after_plan:
